@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>boXus Player</title>
+
+<style>
+body {
+    margin: 0;
+    font-family: sans-serif;
+    display: flex;
+    justify-content: center;  /* 横中央 */
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    align-items: center;      /* 中身中央 */
+    margin-top: 30px;
+}
+
+.controls {
+    margin-bottom: 15px;
+}
+
+#hand {
+    margin-top: 20px;
+    margin-bottom: 30px;  /* ← これがチェックボタンとの間隔 */
+}
+
+#result {
+    margin-top: 20px;
+    font-size: 20px;
+    font-weight: bold;
+    min-height: 28px;   /* 表示が揺れないように */
+}
+
+.result-clear {
+    color: #2e7d32;     /* 緑 */
+    font-size: 32px;
+}
+
+.result-error {
+    color: #d32f2f;     /* 赤 */
+    font-size: 24px;
+}
+
+#modeControls {
+    margin-top: 15px;
+    margin-bottom: 15px;
+    display: flex;
+    gap: 10px;
+}
+
+#modeControls button {
+    padding: 6px 14px;
+    cursor: pointer;
+}
+
+.active-normal {
+    background-color: #90caf9;   /* 青 */
+    font-weight: bold;
+}
+
+.active-memo {
+    background-color: #f48fb1;   /* ピンク */
+    font-weight: bold;
+}
+
+.hand-dimmed {
+    opacity: 0.4;
+    transition: opacity 0.2s ease;
+}
+
+.hand-dimmed button {
+    pointer-events: none;
+}
+
+/* 数字列 */
+#memoNumbersRow {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+/* ○×列 */
+#memoMarksRow {
+    display: flex;
+    justify-content: center;
+    gap: 6px;      /* ← 近づける */
+    margin-top: 6px;
+}
+
+/* ○×ボタン */
+#memoMarksRow button {
+    padding: 6px 24px;   /* ← 横幅を広げる */
+    font-size: 20px;     /* ← 少し大きく */
+    min-width: 124px;     /* ← 横に広く */
+}
+
+#actionButtons {
+    display: flex;
+    gap: 15px;
+    margin-top: 25px;
+}
+
+.reset-button {
+    padding: 8px 18px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.check-button {
+    padding: 14px 28px;
+    font-size: 20px;
+    font-weight: bold;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div id="app">
+
+    <h2>boXus Player ver.0.9</h2>
+
+    <div class="controls">
+        <input type="file" id="loadFile" accept=".json">
+    </div>
+
+    <div id="board"></div>   <!-- 先に盤面 -->
+
+    <div id="hand"></div>    <!-- 下に手札 -->
+
+    <div id="modeControls">
+        <button id="normalModeBtn">配置モード</button>
+        <button id="memoModeBtn">メモモード</button>
+    </div>
+
+    <div id="memoInput" style="display:none; margin-bottom:15px;">
+
+        <!-- 数字列 -->
+        <div id="memoNumbersRow"></div>
+
+        <!-- ○×列 -->
+        <div id="memoMarksRow">
+            <button id="circleBtn">○</button>
+            <button id="crossBtn">×</button>
+        </div>
+
+    </div>
+
+    <div id="actionButtons">
+        <button id="checkBtn" class="check-button">チェック</button>
+        <button id="resetBtn" class="reset-button">リセット</button>
+    </div>
+
+    <p id="result"></p>
+
+</div>
+
+<script type="module" src="player.js"></script>
+
+</body>
+</html>
