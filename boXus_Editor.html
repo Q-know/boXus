@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>boXus Editor</title>
+
+    <style>
+        body {
+            text-align: center;
+            font-family: sans-serif;
+        }
+
+        .control-group {
+            margin-bottom: 10px; /* 縦の余白 */
+        }
+
+        button {
+            margin: 4px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+
+</head>
+
+<body>
+
+
+<div style="display: flex; flex-direction: column; align-items: center;">
+
+
+<h2>boXus Editor ver.0.6.0</h2>
+
+<div class="control-group" style="display: flex; gap: 10px; margin-top: 10px;">
+    <label>横: <input id="width" type="number" value="7"></label>
+    <label>縦: <input id="height" type="number" value="7"></label>
+    <button onclick="createBoard()">盤面を作成</button>
+</div>
+
+
+<div class="control-group" style="margin-top: 15px;">
+    <input id="filename" type="text" placeholder="ファイル名" value="boxus_board">
+    <button onclick="saveBoard()">保存（JSON）</button>
+</div>
+
+<div class="control-group" style="margin-top: 10px;">
+    <input type="file" id="loadFile" accept=".json" onchange="loadBoard(event)">
+</div>
+
+
+<h3>編集モード</h3>
+
+<div class="control-group" style="display: flex; gap: 10px; margin-bottom: 20px;">
+    <button id="mode-value" onclick="setMode('value')">value</button>
+    <button id="mode-chbox" onclick="setMode('chbox')">chbox</button>
+    <button id="mode-hole" onclick="setMode('hole')">hole</button>
+</div>
+
+
+<div style="display: flex; flex-direction: column; align-items: center;">
+
+    <!-- 上ボタン -->
+    <div style="margin-bottom: 8px;">
+        <button class="size-button" onclick="addRowTop()">＋ 上</button>
+        <button class="size-button" onclick="removeRowTop()">－ 上</button>
+    </div>
+
+    <!-- 中央（左右＋盤面） -->
+    <div style="display: flex; align-items: center;">
+
+        <div>
+            <button class="size-button" onclick="addColLeft()">＋ 左</button><br>
+            <button class="size-button" onclick="removeColLeft()">－ 左</button>
+        </div>
+
+        <div id="board"></div>
+
+        <div>
+            <button class="size-button" onclick="addColRight()">＋ 右</button><br>
+            <button class="size-button" onclick="removeColRight()">－ 右</button>
+        </div>
+
+    </div>
+
+    <!-- 下ボタン -->
+    <div style="margin-top: 8px; margin-bottom: 20px;">
+        <button class="size-button" onclick="addRowBottom()">＋ 下</button>
+        <button class="size-button" onclick="removeRowBottom()">－ 下</button>
+    </div>
+
+</div>
+
+
+<div id="handInfo" style="margin-top: 15px;">
+</div>
+
+<div class="control-group"></div>
+    <button onclick="runValidation()">整合性チェック</button>
+</div>
+
+<div class="control-group" style="margin-top: 15px;">
+    <button id="answerModeBtn" onclick="setEditorMode('answer')">回答編集</button>
+    <button id="puzzleModeBtn" onclick="setEditorMode('puzzle')">問題編集</button>
+</div>
+
+<div class="control-group"></div>
+    <button onclick="console.log(getSolutionData())">データ確認</button>
+</div>
+
+<p id="result"></p>
+
+
+<script type="module">
+
+import { validateBoard as validateFromSolver } from "./solver.js";
+
+let solutionData = [];
+let removedCells = new Set();
+let currentMode = "value";
+let errorCells = [];
+let editorMode = "answer"; // "answer" or "puzzle"
+let puzzleData = [];
+
+
+
+function setMode(mode) {
+
+    currentMode = mode;
+
+    // 表示テキスト更新
+    const modeLabel = document.getElementById("currentMode");
+    if (modeLabel) {
+        modeLabel.textContent = mode;
+    }
+
+    // いったん全部リセット
+    const buttons = ["value", "chbox", "hole"];
+
+    for (let m of buttons) {
+        const btn = document.getElementById("mode-" + m);
+        btn.style.backgroundColor = "";
+        btn.style.color = "";
+    }
+
+    // 選択中を強調
+    const activeBtn = document.getElementById("mode-" + mode);
+
+    if (mode === "value") {
+        activeBtn.style.backgroundColor = "#90caf9";
+    }
+
+    if (mode === "chbox") {
+        activeBtn.style.backgroundColor = "#fff59d";
+    }
+
+    if (mode === "hole") {
+        activeBtn.style.backgroundColor = "#424242";
+        activeBtn.style.color = "white";
+    }
+}
+
+
+function createBoard() {
+    const w = parseInt(document.getElementById("width").value);
+    const h = parseInt(document.getElementById("height").value);
+
+    const board = document.getElementById("board");
+    board.innerHTML = "";
+
+    solutionData = [];  // ← データ初期化
+
+    const table = document.createElement("table");
+    table.style.borderCollapse = "collapse";
+
+    for (let y = 0; y < h; y++) {
+        const row = document.createElement("tr");
+        solutionData[y] = [];
+
+        for (let x = 0; x < w; x++) {
+            solutionData[y][x]= {
+                type: "empty",
+                value: null
+            };
+
+
+            const cell = document.createElement("td");
+            cell.style.border = "1px solid black";
+            cell.style.width = "40px";
+            cell.style.height = "40px";
+            cell.style.textAlign = "center";
+            cell.style.cursor = "pointer";
+            cell.contentEditable = (editorMode === "answer");
+
+            solutionData[y][x]= {
+                type: "empty",
+                value: null
+            };
+
+            // セルクリック：type変更
+           cell.onclick = function () {
+
+            const cellData = solutionData[y][x];
+
+            // ===== value モード =====
+            if (currentMode === "value") {
+                return; // type変更しない
+            }
+
+            // ===== chbox モード =====
+            if (currentMode === "chbox") {
+
+                if (cellData.type === "chbox") {
+
+                    if (cellData.value !== null) {
+                        cellData.type = "number";
+                    } else {
+                        cellData.type = "empty";
+                    }
+
+                } else {
+                    cellData.type = "chbox";
+                }
+            }
+
+            // ===== hole モード =====
+            else if (currentMode === "hole") {
+
+                if (cellData.type === "hole") {
+                    cellData.type = "empty";
+                    cellData.value = null;
+                } else {
+                    cellData.type = "hole";
+                    cellData.value = null;
+                }
+            }
+
+            updateCellDisplay(cell, cellData);
+        };
+
+
+        // 入力処理
+        cell.oninput = function () {
+
+            const cellData = solutionData[y][x]
+;
+
+            // hole は入力禁止
+            if (cellData.type === "hole") {
+                cell.textContent = "";
+                return;
+            }
+
+            let original = cell.textContent;
+            let filtered = original.replace(/[^0-9]/g, "");
+
+            // 文字が変わったときだけ書き直す
+            if (original !== filtered) {
+                cell.textContent = filtered;
+            }
+
+            if (filtered === "") {
+
+                cellData.value = null;
+
+                if (cellData.type === "number") {
+                    cellData.type = "empty";
+                }
+
+            } else {
+
+                cellData.value = parseInt(filtered);
+
+                if (cellData.type === "empty") {
+                    cellData.type = "number";
+                }
+            }
+
+            updateCellDisplay(cell, cellData);
+        };
+
+
+            row.appendChild(cell);
+        }
+
+        table.appendChild(row);
+    }
+
+    board.appendChild(table);
+
+    setMode(currentMode);
+
+    removedCells.clear();
+
+    updateHandDisplay();
+
+}
+
+
+//typeによるセルの色変更
+function updateCellDisplay(cell, cellData) {
+
+    cell.style.backgroundColor = "white";
+
+    if (cellData.type === "hole") {
+        cell.textContent = "";
+        cell.style.backgroundColor = "black";
+    }
+
+    if (cellData.type === "chbox") {
+        cell.style.backgroundColor = "yellow";
+    }
+
+    if (cellData.type === "number") {
+        cell.style.backgroundColor = "white";
+    }
+}
+
+
+function renderBoardFromData() {
+    
+    const data = solutionData;
+
+    const board = document.getElementById("board");
+    board.innerHTML = "";
+
+    const table = document.createElement("table");
+    table.style.borderCollapse = "collapse";
+
+    for (let y = 0; y < solutionData.length; y++) {
+
+        const row = document.createElement("tr");
+
+        for (let x = 0; x < solutionData[y].length; x++) {
+
+            const cellData = data[y][x];
+
+            const cell = document.createElement("td");
+            cell.style.border = "1px solid black";
+            cell.style.width = "40px";
+            cell.style.height = "40px";
+            cell.style.textAlign = "center";
+            cell.style.cursor = "pointer";
+            cell.contentEditable = (editorMode === "answer");
+
+            // 表示反映
+            if (cellData.value !== null) {
+                cell.textContent = cellData.value;
+            }
+
+            // いったん通常表示に戻す
+            cell.style.opacity = "1";
+
+            // 問題編集モードで、削除対象なら薄く
+            if (editorMode === "puzzle") {
+
+                const key = y + "-" + x;
+
+                if (removedCells.has(key)) {
+                    cell.style.opacity = "0.3";
+                }
+            }
+
+
+            updateCellDisplay(cell, cellData);
+
+            // クリック処理
+            cell.onclick = function () {
+                handleCellClick(cell, y, x);
+            };
+
+            // 入力処理
+            cell.oninput = function () {
+                handleCellInput(cell, y, x);
+            };
+
+            // いったん通常表示
+            cell.style.boxShadow = "";
+
+            // エラーセルなら赤枠
+            for (let [ey, ex] of errorCells) {
+                if (ey === y && ex === x) {
+                    cell.style.boxShadow = "inset 0 0 0 3px red";
+                }
+            }
+
+            row.appendChild(cell);
+        }
+
+        table.appendChild(row);
+    }
+
+    board.appendChild(table);
+
+    const sizeButtons = document.querySelectorAll(".size-button");
+
+    sizeButtons.forEach(btn => {
+        btn.disabled = (editorMode === "puzzle");
+    });
+
+}
+
+
+function handleCellClick(cell, y, x) {
+
+    if (editorMode === "puzzle") {
+
+        const cellData = solutionData[y][x];
+
+        // 数字があるマスだけ対象
+        if (cellData.value !== null) {
+
+            const key = y + "-" + x;
+
+            if (removedCells.has(key)) {
+                removedCells.delete(key);
+            } else {
+                removedCells.add(key);
+            }
+
+            renderBoardFromData();
+
+            updateHandDisplay();
+
+        }
+
+        return; // ここで終了（type変更などさせない）
+    }
+
+
+    if (editorMode === "puzzle") {
+        return;
+    }
+
+
+    const data = editorMode === "answer" ? solutionData : puzzleData;
+
+    const cellData = data[y][x];
+
+    if (currentMode === "value") return;
+
+    if (currentMode === "chbox") {
+
+        if (cellData.type === "chbox") {
+
+            if (cellData.value !== null) {
+                cellData.type = "number";
+            } else {
+                cellData.type = "empty";
+            }
+
+        } else {
+            cellData.type = "chbox";
+        }
+    }
+
+    else if (currentMode === "hole") {
+
+        if (cellData.type === "hole") {
+            cellData.type = "empty";
+            cellData.value = null;
+        } else {
+            cellData.type = "hole";
+            cellData.value = null;
+        }
+    }
+
+    renderBoardFromData();
+}
+
+
+function handleCellInput(cell, y, x) {
+
+    if (editorMode === "puzzle") {
+        return;
+    }
+
+    const data = editorMode === "answer" ? solutionData : puzzleData;
+
+    const cellData = data[y][x];
+
+    if (cellData.type === "hole") {
+        cell.textContent = "";
+        return;
+    }
+
+    let text = cell.textContent.trim();
+    text = text.replace(/[^0-9]/g, "");
+
+    if (text === "") {
+
+        cellData.value = null;
+
+        if (cellData.type === "number") {
+            cellData.type = "empty";
+        }
+
+    } else {
+
+        cellData.value = parseInt(text);
+
+        if (cellData.type === "empty") {
+            cellData.type = "number";
+        }
+    }
+}
+
+
+function createEmptyCell() {
+    return { type: "empty", value: null };
+}
+
+
+function addRowBottom() {
+
+    if (editorMode === "puzzle") {
+        return;
+    }
+
+    const width = solutionData[0].length;
+    let newRow = [];
+
+    for (let i = 0; i < width; i++) {
+        newRow.push(createEmptyCell());
+    }
+
+    solutionData.push(newRow);
+    renderBoardFromData();
+}
+
+function removeRowBottom() {
+
+    if (editorMode === "puzzle") {
+        return;
+    }
+    
+    if (solutionData.length > 1) {
+        solutionData.pop();
+        renderBoardFromData();
+    }
+}
+
+
+function addRowTop() {
+
+    if (editorMode === "puzzle") {
+        return;
+    }
+    
+    const width = solutionData[0].length;
+    let newRow = [];
+
+    for (let i = 0; i < width; i++) {
+        newRow.push(createEmptyCell());
+    }
+
+    solutionData.unshift(newRow);
+    renderBoardFromData();
+}
+
+function removeRowTop() {
+
+    if (editorMode === "puzzle") {
+        return;
+    }
+    
+    if (solutionData.length > 1) {
+        solutionData.shift();
+        renderBoardFromData();
+    }
+}
+
+
+function addColRight() {
+
+    if (editorMode === "puzzle") {
+        return;
+    }
+    
+    for (let y = 0; y < solutionData.length; y++) {
+        solutionData[y].push({ type: "empty", value: null });
+    }
+
+    renderBoardFromData();
+}
+
+function removeColRight() {
+
+    if (editorMode === "puzzle") {
+        return;
+    }
+    
+    if (solutionData[0].length > 1) {
+
+        for (let y = 0; y < solutionData.length; y++) {
+            solutionData[y].pop();
+        }
+
+        renderBoardFromData();
+    }
+}
+
+
+function addColLeft() {
+
+    if (editorMode === "puzzle") {
+        return;
+    }
+    
+    for (let y = 0; y < solutionData.length; y++) {
+        solutionData[y].unshift({ type: "empty", value: null });
+    }
+
+    renderBoardFromData();
+}
+
+function removeColLeft() {
+
+    if (editorMode === "puzzle") {
+        return;
+    }
+    
+    if (solutionData[0].length > 1) {
+
+        for (let y = 0; y < solutionData.length; y++) {
+            solutionData[y].shift();
+        }
+
+        renderBoardFromData();
+    }
+}
+
+
+function runValidation() {
+
+    const result = validateFromSolver(solutionData);
+
+    errorCells = result.errors.map(e => [e.y, e.x]);
+
+    if (result.isValid) {
+        alert("整合性OK");
+    } else {
+        alert(result.errors.map(e => e.message).join("\n"));
+    }
+
+    renderBoardFromData();
+}
+
+
+function saveBoard() {
+
+    const nameInput = document.getElementById("filename").value.trim();
+    const filename = nameInput ? nameInput : "boxus_board";
+
+    const saveData = {
+        solution: solutionData,
+        removed: Array.from(removedCells),
+        removedCount: getRemovedCountByNumber()
+    };
+
+    const dataStr = JSON.stringify(saveData, null, 2);
+
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename + ".json";
+    a.click();
+
+    URL.revokeObjectURL(url);
+}
+
+
+function loadBoard(event) {
+
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+
+        try {
+            const loaded = JSON.parse(e.target.result);
+
+            solutionData = loaded.solution || [];
+            removedCells = new Set(loaded.removed || []);
+
+            renderBoardFromData();
+            updateHandDisplay();
+
+            const nameWithoutExt = file.name.replace(/\.json$/i, "");
+            document.getElementById("filename").value = nameWithoutExt;
+
+        } catch (err) {
+            alert("JSON読み込み失敗");
+        }
+    };
+
+    reader.readAsText(file);
+
+    event.target.value = "";
+}
+
+
+function setEditorMode(mode) {
+
+    editorMode = mode;
+
+    const answerBtn = document.getElementById("answerModeBtn");
+    const puzzleBtn = document.getElementById("puzzleModeBtn");
+
+    if (mode === "answer") {
+        answerBtn.style.backgroundColor = "#90caf9";
+        puzzleBtn.style.backgroundColor = "";
+    } else {
+        puzzleBtn.style.backgroundColor = "#ffcc80";
+        answerBtn.style.backgroundColor = "";
+    }
+
+    renderBoardFromData();
+}
+
+
+function getRemovedCountByNumber() {
+
+    const countMap = {};
+
+    removedCells.forEach(key => {
+        const [y, x] = key.split("-").map(Number);
+        const value = solutionData[y][x].value;
+
+        if (value !== null) {
+            countMap[value] = (countMap[value] || 0) + 1;
+        }
+    });
+
+    return countMap;
+}
+
+
+function updateHandDisplay() {
+
+    const handDiv = document.getElementById("handInfo");
+    handDiv.innerHTML = "";
+
+    const countMap = getRemovedCountByNumber();
+    const keys = Object.keys(countMap);
+
+    if (keys.length === 0) {
+        handDiv.textContent = "手札：なし";
+        return;
+    }
+
+    keys.sort((a, b) => Number(a) - Number(b));
+
+    const label = document.createElement("div");
+    label.textContent = "手札";
+    label.style.marginBottom = "5px";
+    label.style.fontWeight = "bold";
+    handDiv.appendChild(label);
+
+    const container = document.createElement("div");
+    container.style.display = "flex";
+    container.style.gap = "8px";
+    container.style.flexWrap = "wrap";
+
+    keys.forEach(num => {
+
+        const tile = document.createElement("div");
+        tile.style.position = "relative";
+        tile.style.width = "40px";
+        tile.style.height = "40px";
+        tile.style.border = "2px solid black";
+        tile.style.display = "flex";
+        tile.style.alignItems = "center";
+        tile.style.justifyContent = "center";
+        tile.style.fontWeight = "bold";
+        tile.style.fontSize = "18px";
+        tile.style.backgroundColor = "#f5f5f5";
+        tile.style.borderRadius = "6px";
+
+        tile.textContent = num;
+
+        const badge = document.createElement("div");
+        badge.textContent = countMap[num];
+        badge.style.position = "absolute";
+        badge.style.bottom = "-6px";
+        badge.style.right = "-6px";
+        badge.style.backgroundColor = "#e53935";
+        badge.style.color = "white";
+        badge.style.borderRadius = "50%";
+        badge.style.width = "20px";
+        badge.style.height = "20px";
+        badge.style.display = "flex";
+        badge.style.alignItems = "center";
+        badge.style.justifyContent = "center";
+        badge.style.fontSize = "12px";
+
+        tile.appendChild(badge);
+        container.appendChild(tile);
+    });
+
+    handDiv.appendChild(container);
+}
+
+window.createBoard = createBoard;
+window.saveBoard = saveBoard;
+window.loadBoard = loadBoard;
+window.setMode = setMode;
+window.addRowTop = addRowTop;
+window.removeRowTop = removeRowTop;
+window.addRowBottom = addRowBottom;
+window.removeRowBottom = removeRowBottom;
+window.addColLeft = addColLeft;
+window.removeColLeft = removeColLeft;
+window.addColRight = addColRight;
+window.removeColRight = removeColRight;
+window.runValidation = runValidation;
+window.setEditorMode = setEditorMode;
+window.getSolutionData = () => solutionData;
+
+
+</script>
+
+
+</div>
+
+</body>
+</html>
