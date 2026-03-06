@@ -29,20 +29,18 @@ body {
 }
 
 #result {
-    margin-top: 20px;
+    text-align: center;
+    margin-top: 12px;
     font-size: 20px;
     font-weight: bold;
-    min-height: 28px;   /* 表示が揺れないように */
 }
 
 .result-clear {
-    color: #2e7d32;     /* 緑 */
-    font-size: 32px;
+    color: #2ecc71;
 }
 
 .result-error {
-    color: #d32f2f;     /* 赤 */
-    font-size: 24px;
+    color: #e74c3c;
 }
 
 #modeControls {
@@ -117,6 +115,43 @@ body {
     font-weight: bold;
 }
 
+#board td {
+    background-color: white;
+}
+
+#historyControls {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 10px;
+}
+
+#historyControls button {
+    font-size: 16px;
+    padding: 6px 14px;
+}
+
+#checkBtn {
+    display: block;
+    margin: 18px auto 0 auto;
+    padding: 10px 40px;
+    font-size: 18px;
+    width: 200px;
+    font-weight: bold;
+}
+
+#board {
+    border: 2px solid #444;
+    padding: 0px;
+    display: inline-block;
+}
+
+/* クリア時 */
+.board-clear {
+    border-color: #2ecc71;
+    box-shadow: 0 0 16px #2ecc71;
+}
+
 </style>
 
 </head>
@@ -125,7 +160,7 @@ body {
 
 <div id="app">
 
-    <h2>boXus Player ver.1.0</h2>
+    <h2>boXus Player ver.0.9</h2>
 
     <div class="controls">
         <input type="file" id="loadFile" accept=".json">
@@ -153,17 +188,19 @@ body {
 
     </div>
 
-    <div id="actionButtons">
-        <button id="checkBtn" class="check-button">チェック</button>
-        <button id="resetBtn" class="reset-button">リセット</button>
-    </div>
+    <div id="historyControls">
+    <button id="undoBtn">↶ Undo</button>
+    <button id="redoBtn">Redo ↷</button>
+    <button id="resetBtn">Reset</button>
+</div>
 
-    <p id="result"></p>
+<button id="checkBtn">チェック</button>
+
+<p id="result"></p>
 
 </div>
 
 <script type="module" src="player.js"></script>
 
 </body>
-
 </html>

@@ -16,6 +16,11 @@ let selectedMark = null;
 let initialHand = {};
 let initialRemoved = [];
 
+let errorCells = new Set();
+
+let history = [];
+let historyIndex = -1;
+
 
 const checkBtn = document.getElementById("checkBtn");
 checkBtn.disabled = true;
@@ -99,9 +104,18 @@ function loadBoard(event) {
         updateModeUI();
         renderMemoInput();
         checkBtn.disabled = false;
+        
+        result.textContent = "";
+        result.className = "";
+        boardDiv.classList.remove("board-clear");
+        boardDiv.classList.remove("board-error");
+
+        saveState();
     };
 
     reader.readAsText(file);
+
+    
 }
 
 
@@ -117,11 +131,12 @@ function renderBoard() {
         const row = document.createElement("tr");
 
         for (let x = 0; x < playerData[y].length; x++) {
-
+            
             const cellData = playerData[y][x];
             const key = y + "-" + x;
 
             const cell = document.createElement("td");
+            cell.style.backgroundColor = "white";
             cell.style.border = "1px solid black";
             cell.style.width = "50px";
             cell.style.height = "50px";
@@ -202,7 +217,14 @@ function renderBoard() {
             // ===== クリック処理 =====
             cell.onclick = function() {
 
-                if (fixedSet.has(key)) return;
+                // 盤面操作があったらエラー表示を全部消す
+                errorCells.clear();
+
+                if (fixedSet.has(key)) {
+                    renderBoard();
+                    return;
+                }
+
 
                 // ===== メモモード =====
                 if (mode === "memo") {
@@ -219,6 +241,8 @@ function renderBoard() {
                             cellData.memoNumbers.clear();
                         }
 
+                        saveState();
+
                         renderBoard();
                         return;
                     }
@@ -233,6 +257,8 @@ function renderBoard() {
                         }
 
                         cellData.mark = null;
+
+                        saveState();
 
                         renderBoard();
                         return;
@@ -251,6 +277,8 @@ function renderBoard() {
 
                         cellData.value = null;
 
+                        saveState();
+
                         renderBoard();
                         renderHand();
                         return;
@@ -265,18 +293,39 @@ function renderBoard() {
 
                     hand[selectedNumber]--;
 
+                    saveState();
+
                     renderBoard();
                     renderHand();
                 }
             };
 
+            if (errorCells.has(key)) {
+
+                const frame = document.createElement("div");
+                frame.style.position = "absolute";
+                frame.style.top = "0";
+                frame.style.left = "0";
+                frame.style.width = "100%";
+                frame.style.height = "100%";
+                frame.style.border = "3px solid red";
+                frame.style.boxSizing = "border-box";
+                frame.style.pointerEvents = "none";
+
+                cell.appendChild(frame);
+            }
+
             row.appendChild(cell);
+
         }
 
         table.appendChild(row);
     }
 
     boardDiv.appendChild(table);
+
+    document.getElementById("undoBtn").disabled = (historyIndex <= 0);
+    document.getElementById("redoBtn").disabled = (historyIndex >= history.length - 1);
 }
 
 
@@ -291,25 +340,45 @@ function checkBoard() {
         return;
     }
 
-    const result = validateForPlayer(playerData);
-    const allUsed = Object.values(hand).every(count => count === 0);
+    errorCells.clear();
 
+    const result = validateForPlayer(playerData);
+
+    if (result.errors) {
+        result.errors.forEach(e => {
+            if (e.y !== undefined && e.x !== undefined) {
+                errorCells.add(e.y + "-" + e.x);
+            }
+        });
+    }
+
+    const allUsed = Object.values(hand).every(count => count === 0);
     if (result.isValid && allUsed) {
 
         resultP.textContent = "クリア！";
         resultP.classList.add("result-clear");
+
+        boardDiv.classList.add("board-clear");
+        boardDiv.classList.remove("board-error");
 
     } else {
 
         if (!result.isValid) {
             resultP.textContent = "エラーあり";
             resultP.classList.add("result-error");
+
+            boardDiv.classList.add("board-error");
+            boardDiv.classList.remove("board-clear");
         } 
         else if (!allUsed) {
             resultP.textContent = "手札をすべて使い切ってください";
             resultP.classList.add("result-error");
+
+            boardDiv.classList.add("board-error");
+            boardDiv.classList.remove("board-clear");
         }
     }
+    renderBoard();
 }
 
 
@@ -532,4 +601,109 @@ resetBtn.onclick = () => {
     renderMemoInput();
 
     resultP.textContent = "";
+
+    errorCells.clear();
+
+    history = [];
+    historyIndex = -1;
+
+    saveState();
 };
+
+
+function saveState() {
+
+    history = history.slice(0, historyIndex + 1);
+
+    history.push({
+        board: structuredClone(playerData),
+        hand: structuredClone(hand)
+    });
+
+    historyIndex++;
+}
+
+
+function undoMove() {
+
+    if (historyIndex <= 0) return;
+
+    historyIndex--;
+
+    const state = history[historyIndex];
+
+    playerData = structuredClone(state.board);
+    hand = structuredClone(state.hand);
+
+    errorCells.clear();
+
+    renderBoard();
+    renderHand();
+}
+
+
+function redoMove() {
+
+    if (historyIndex >= history.length - 1) return;
+
+    historyIndex++;
+
+    const state = history[historyIndex];
+
+    playerData = structuredClone(state.board);
+    hand = structuredClone(state.hand);
+
+    errorCells.clear();
+
+    renderBoard();
+    renderHand();
+}
+
+
+document.getElementById("undoBtn").onclick = undoMove;
+document.getElementById("redoBtn").onclick = redoMove;
+
+
+function restoreState(state) {
+
+    playerData = state.board;
+    hand = state.hand;
+
+    for (let y = 0; y < playerData.length; y++) {
+        for (let x = 0; x < playerData[y].length; x++) {
+
+            const cell = playerData[y][x];
+
+            // memoNumbers が壊れている場合の復元
+            if (cell.memoNumbers instanceof Set) {
+                continue;
+            }
+
+            if (Array.isArray(cell.memoNumbers)) {
+                cell.memoNumbers = new Set(cell.memoNumbers);
+            } else {
+                cell.memoNumbers = new Set();
+            }
+        }
+    }
+
+    renderBoard();
+    renderHand();
+}
+
+
+document.addEventListener("keydown", (e) => {
+
+    if (e.ctrlKey && e.key === "z") {
+        e.preventDefault();
+        undoMove();
+    }
+
+    if (e.ctrlKey && e.key === "y") {
+        e.preventDefault();
+        redoMove();
+    }
+
+});
+
+
